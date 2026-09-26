@@ -71,6 +71,51 @@ process-wide state this library doesn't want to touch.
 always ends `"connected"`); `stop()` closes it and returns to
 `"disconnected"`.
 
+## Identity metadata leaks
+
+Required standard for any HTTP client this project relies on for anonymized
+traffic (Tor/I2P), enforced here and checked against every sibling
+`http-client-*` port: no default header, response header, or connection
+behavior may reveal more about the requester than it has to.
+
+- **Fixed 2026-09-26**: `send()` used to only set `User-Agent` when the
+  caller's `envelope.header("User-Agent")` was already present; with none,
+  `undici`'s `fetch` injected its own default. Confirmed directly in this
+  project's installed copy (`node_modules/undici/lib/web/fetch/index.js`):
+  ```
+  const defaultUserAgent = typeof __UNDICI_IS_NODE__ !== 'undefined' ...
+    ? 'node' : 'undici'
+  ...
+  if (!httpRequest.headersList.contains('user-agent', true)) {
+    httpRequest.headersList.append('user-agent', defaultUserAgent, true)
+  }
+  ```
+  Now `DEFAULT_USER_AGENT` (a generic, widely-shared browser value) is set
+  on the `Headers` object whenever the caller hasn't supplied one - same
+  fix already applied to `http-client-java` (OkHttp's own default,
+  confirmed via bytecode), `http-client-cpp`/`http-client-python` (both
+  previously defaulted to the project-identifying literal
+  `"ra-http-client"`, arguably worse), `http-client-go`/`http-client-rust`,
+  and `1m5-remnant`'s Android `TorClient`. Verified with a real test
+  (`default User-Agent is generic, not undici's own 'node' default`) that
+  captures the actual header a local server receives, not just that the
+  code compiles - full suite: 7 passed.
+- **Not yet verified**: does undici's `ProxyAgent` speak genuine SOCKS5 for a
+  `socks5://` `proxyUrl`, or only HTTP CONNECT-style tunneling? Not checked
+  in this pass. If it's CONNECT-only, this client cannot correctly reach a
+  SOCKS5-only relay like `tor-client-java`'s `TorSocksRelay` at all - a
+  functional gap, not just a leak - and if it does support SOCKS5, confirm
+  it resolves the destination hostname via the proxy, not local DNS, the
+  same requirement `http-client-cpp`'s `ConnectThroughSocks5` was directly
+  confirmed to meet. A local resolution would leak the destination outside
+  the proxy entirely, the same bug found and fixed in
+  `bitcoin-client-java`'s bitcoinj DNS-seed lookups (`tor-client-java`,
+  2026-09-25).
+- **No server/inbound half** (see "Client only" above), so the third known
+  leak shape - a server-identifying response header, found and fixed in
+  `http-client-java`'s Jetty listener (`Server: Jetty(<version>)`) - doesn't
+  apply yet. Check for it if local server hosting is ever built.
+
 ## Not here
 
 - Local HTTP server / SPA hosting / WebSocket — `http-client-java`'s Jetty

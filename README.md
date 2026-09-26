@@ -39,6 +39,21 @@ npm run build
 npm run typecheck
 ```
 
+## Identity metadata leaks
+
+**Fixed 2026-09-26**, the same class of bug found and fixed in
+`http-client-java`/`-cpp`/`-python` and `1m5-remnant`'s Android `TorClient`:
+`send()` used to only set a `User-Agent` header when the caller's `Envelope`
+already had one; with none, `undici`'s own `fetch` implementation injected
+`User-Agent: node` - confirmed directly in
+`node_modules/undici/lib/web/fetch/index.js` (`defaultUserAgent`). Now
+defaults to a generic, widely-shared browser value instead - verified with
+a real test capturing the actual header a local server receives
+(`default User-Agent is generic, not undici's own 'node' default`; full
+suite: 7 passed). See `DESIGN.md` "Identity metadata leaks" for the
+still-open SOCKS5 DNS-resolution check, which does need real verification,
+not just assumed from the `ProxyAgent`'s support for a `socks5://` URL.
+
 ## Status
 
 Client only — GET/POST/PUT/DELETE, HTTP and HTTPS (via `undici`), multipart

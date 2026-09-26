@@ -16,6 +16,16 @@ import { Agent, Headers, ProxyAgent, fetch as undiciFetch, type BodyInit, type D
 
 export const DEFAULT_REQUEST_TIMEOUT_MS = 60_000;
 
+/**
+ * Sent whenever a caller's `Envelope` has no `User-Agent` header of its own. Without this,
+ * `undici`'s `fetch` injects its own default (`"node"` in a Node.js runtime - confirmed
+ * directly in `undici`'s own source, `lib/web/fetch/index.js`'s `defaultUserAgent`), which
+ * identifies the runtime to every destination rather than blending in. A generic,
+ * widely-shared value instead - matches Tor Browser's own practice of giving every user an
+ * identical, unremarkable fingerprint. See DESIGN.md "Identity metadata leaks".
+ */
+export const DEFAULT_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0";
+
 export type Status = "disconnected" | "connecting" | "connected" | "error";
 
 /** HTTP response codes treated as a sign the request was blocked rather than
@@ -132,6 +142,7 @@ export class HttpClient {
       const value = envelope.header(name);
       if (typeof value === "string") headers.set(name, value);
     }
+    if (!headers.has("User-Agent")) headers.set("User-Agent", DEFAULT_USER_AGENT);
 
     let body: BodyInit | undefined;
     if (envelope.multipart !== undefined) {

@@ -120,6 +120,26 @@ test("POST with sendContentOnly sends raw content, not the JSON envelope", async
   }
 });
 
+test("default User-Agent is generic, not undici's own 'node' default", async () => {
+  let receivedUserAgent: string | undefined;
+  const server = createHttpServer((req, res) => {
+    receivedUserAgent = req.headers["user-agent"];
+    res.end("ok");
+  });
+  const port = await listenOn(server);
+  try {
+    const client = HttpClient.fromConfig({});
+    const env = Envelope.document();
+    env.url = `http://127.0.0.1:${port}/`;
+    env.action = Action.Get;
+    assert.equal(await client.send(env), true);
+    assert.ok(receivedUserAgent?.startsWith("Mozilla/5.0"), `got ${receivedUserAgent}`);
+    assert.notEqual(receivedUserAgent, "node");
+  } finally {
+    server.close();
+  }
+});
+
 test("blocked status code is recorded as an error message", async () => {
   const server = createHttpServer((req, res) => {
     res.writeHead(403);
